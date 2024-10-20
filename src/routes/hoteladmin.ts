@@ -1,9 +1,13 @@
-import { Router } from 'express';
-import { HotelAdminDetails } from '../controllers/hoteladmin';
+import express, { Router } from "express";
+import { createHotel, getHotels } from "../controllers/hoteladmin";
+import upload from "../config/uploadConfig";
 
+const router: Router = express.Router();
 
-const router = Router();
-//api  = /api/hoteladmin/details
-router.post('/details', HotelAdminDetails);
+// Route for creating a hotel with image upload (max 5 images)
+router.post('/create', upload.array('images', 5), createHotel);
+
+// Route for getting all hotels
+router.get('/', getHotels);
 
 export default router;

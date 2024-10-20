@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 // Define an interface for the Hotel schema
-interface IHotel extends Document {
+export interface IHotel extends Document {
     name: string;
     email: string;
     phone: number;
@@ -10,7 +10,7 @@ interface IHotel extends Document {
     price: number;
     room: string;
     wifi: string;
-    furnished: string;
+    furnished: boolean; // Change to boolean for consistency
     image: { filename: string; path: string }[];
     createdAt: Date;
 }
@@ -23,17 +23,17 @@ const hotelSchema: Schema<IHotel> = new mongoose.Schema({
     },
     email: {
         type: String,
-        required: [true, "email is required"],
+        required: [true, "Email is required"],
         unique: true, // Ensure unique email
     },
     phone: {
         type: Number,
-        required: [true, "phone number is required"],
-        unique: true, // Ensure unique phone no
+        required: [true, "Phone number is required"],
+        unique: true, // Ensure unique phone number
     },
     password: {
         type: String,
-        required: [true, "password is required"],
+        required: [true, "Password is required"],
     },
     address: {
         type: String,
@@ -41,19 +41,19 @@ const hotelSchema: Schema<IHotel> = new mongoose.Schema({
     },
     price: {
         type: Number,
-        required: true
+        required: true,
     },
     room: {
         type: String,
-        required: true
+        required: true,
     },
     wifi: {
         type: String,
         default: 'No',
     },
     furnished: {
-        type: String,
-        default: 'No',
+        type: Boolean, // Change to boolean for proper type handling
+        default: false,
     },
     image: [{
         filename: {
