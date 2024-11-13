@@ -1,82 +1,163 @@
 import { Request, Response } from 'express';
-import hotelService from '../services/hotelService';
-import { IHotel } from '../models/hotelModel'; // Adjust this import as necessary
+import cloudinary from 'cloudinary';
+import fs from 'fs';
+import Hotels, { IHotel } from '../models/hotelModel';
 
-interface Image {
-    filename: string;
-    path: string;
+cloudinary.v2;
+
+interface HotelRequestBody {
+  name: string;
+  phone: number;
+  price: number;
+  room: string;
+  address: string;
+  wifi: string;
+  furnished: string;
+  latitude: string;
+  longitude: string;
 }
 
-// Update HotelData to include necessary properties
-type HotelData = Omit<IHotel, "_id" | "createdAt">; // Ensure this includes all required properties except the omitted ones
+interface File {
+  path: string;
+}
 
 export const createHotel = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { name, email, password, phone, price, room, address, wifi, furnished } = req.body;
+  try {
+    const {
+      name,
+      phone,
+      price,
+      room,
+      address,
+      wifi,
+      furnished,
+      latitude,
+      longitude,
+    } = req.body as HotelRequestBody;
+    const images = req.files as Express.Multer.File[] | undefined;
 
-        // Validate required fields
-        if (!name || !email || !password || !phone || !address) {
-            res.status(400).send({ msg: "All fields are required" });
-            return;
-        }
-
-        // Check if a hotel with the same email already exists
-        const existingUser = await hotelService.findOneByEmail(email);
-        if (existingUser) {
-            res.status(400).send({
-                msg: 'Hotel with this email already exists',
-                success: false
-            });
-            return;
-        }
-
-        // Type assertion for req.files
-        const files = req.files as Express.Multer.File[] | undefined;
-
-        // Prepare array of image paths if multiple images are uploaded
-        const image: Image[] = files?.map((file) => ({
-            filename: file.filename,
-            path: file.path
-        })) || []; // Fallback to an empty array if files is undefined
-
-        // Prepare hotel data using the updated HotelData type
-        const hotelData: HotelData = {
-            name,
-            email,
-            phone,
-            password,
-            address,
-            price,
-            room,
-            wifi,
-            furnished,
-            image // Ensure this matches the structure of IHotel
-        } as HotelData; // Explicitly assert the type
-
-        // Create a new hotel using the service
-        const newHotel = await hotelService.createHotel(hotelData);
-
-        // Respond with success message and hotel data
-        res.status(201).send({
-            msg: "Hotel created successfully",
-            success: true,
-            newHotel
-        });
-    } catch (error) {
-        console.error("Error creating hotel:", error);
-        res.status(500).json({ error: "Internal server error" });
+    // Validate required fields
+    if (!name || !phone || !address) {
+      res.status(400).json({ msg: "Name, phone, and address are required" });
+      return;
     }
+
+    // Upload images to Cloudinary
+    const uploadedImages = images
+      ? await Promise.all(
+          images.map(async (file: File) => {
+            const result = await cloudinary.v2.uploader.upload(file.path);
+            fs.unlink(file.path, (err) => {
+              if (err) console.error("Error deleting file:", err);
+            });
+            return {
+              public_id: result.public_id,
+              url: result.secure_url,
+              secure_url: result.secure_url,
+            };
+          })
+        )
+      : [];
+
+    // Create hotel data
+    const hotelData: Partial<IHotel> = {
+      name,
+      phone,
+      address,
+      price,
+      room,
+      wifi,
+      furnished,
+      images: uploadedImages,
+      location: {
+        type: "Point",
+        coordinates: [parseFloat(longitude), parseFloat(latitude)],
+      },
+    };
+
+    const newHotel = new Hotels(hotelData);
+    await newHotel.save();
+
+    res.status(201).json({ msg: "Hotel created successfully", success: true, newHotel });
+  } catch (error) {
+    console.error("Error creating hotel:", error);
+    res.status(500).json({ error: "Internal server error", details: (error as Error).message });
+  }
 };
 
-export const getHotels = async (req: Request, res: Response): Promise<void> => {
-    try {
-        // Fetch all hotels from the service
-        const hotels = await hotelService.getAllHotels();
+export const getAllHotels = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const hotels = await Hotels.find();
+    res.status(200).json(hotels);
+  } catch (error) {
+    res.status(500).json({ message: 'Error retrieving hotels', error });
+  }
+};
 
-        // Respond with the list of hotels
-        res.status(200).json({ success: true, data: hotels });
-    } catch (error) {
-        console.error("Error fetching hotels:", error);
-        res.status(500).json({ error: "Internal server error" });
+// Retrieve a single hotel by phone number
+export const getOneHotel = async (req: Request, res: Response): Promise<void> => {
+  const { phone } = req.params;
+  try {
+    const hotel = await Hotels.findOne({ phone });
+    if (!hotel) {
+      res.status(404).json({ message: "Hotel not found" });
+      return;
     }
+    res.status(200).json(hotel);
+  } catch (error) {
+    res.status(500).json({ message: "Error retrieving hotel", error });
+  }
+};
+
+export const getLocation = async (req: Request, res: Response): Promise<void> => {
+  const { latitude, longitude } = req.body;
+
+  if (latitude == null || longitude == null) {
+    res.status(400).json({ message: 'Latitude and longitude are required.' });
+    return;
+  }
+
+  try {
+    const newLocation = new Hotels({
+      location: {
+        type: "Point",
+        coordinates: [parseFloat(longitude), parseFloat(latitude)],
+      },
+    });
+    await newLocation.save();
+
+    res.json({ message: 'Location saved successfully', data: newLocation });
+  } catch (error) {
+    console.error('Error saving location:', error);
+    res.status(500).json({ message: 'Error saving location', error });
+  }
+};
+
+// Find nearest rent rooms within a specified distance
+export const find_nearest = async (req: Request, res: Response): Promise<void> => {
+  const { latitude, longitude, maxDistance = 1000 } = req.body;
+
+  try {
+    const rentRooms = await Hotels.aggregate([
+      {
+        $geoNear: {
+          near: { type: "Point", coordinates: [parseFloat(longitude), parseFloat(latitude)] },
+          distanceField: "dist.calculated",
+          maxDistance: parseFloat(maxDistance) * 1609, // Convert miles to meters if needed
+          spherical: true,
+        },
+      },
+    ]);
+
+    res.status(200).send({
+      success: true,
+      msg: "Nearby hotels found",
+      data: rentRooms,
+    });
+  } catch (error) {
+    res.status(400).send({
+      success: false,
+      msg: (error as Error).message ,
+    });
+  }
 };

@@ -1,77 +1,97 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from "mongoose";
 
-// Define an interface for the Hotel schema
-export interface IHotel extends Document {
-    name: string;
-    email: string;
-    phone: number;
-    password: string;
-    address: string;
-    price: number;
-    room: string;
-    wifi: string;
-    furnished: boolean; // Change to boolean for consistency
-    image: { filename: string; path: string }[];
-    createdAt: Date;
+// Define interface for hotel images
+interface IImage {
+  public_id: string;
+  url: string;
+  secure_url: string;
 }
 
-// Create a Schema corresponding to the document interface
-const hotelSchema: Schema<IHotel> = new mongoose.Schema({
-    name: {
+// Define interface for hotel location
+interface ILocation {
+  type: "Point";
+  coordinates: [number, number];
+  timestamp?: Date;
+}
+
+// Define interface for hotel document
+export interface IHotel extends Document {
+  name: string;
+  phone: number;
+  address: string;
+  price: number;
+  room: string;
+  wifi?: string;
+  furnished?: string;
+  images: IImage[];
+  location: ILocation;
+}
+
+// Define the schema for hotels
+const hotelSchema = new Schema<IHotel>({
+  name: {
+    type: String,
+    required: true,
+  },
+  phone: {
+    type: Number,
+    required: [true, "Phone number is required"],
+    unique: true,
+  },
+  address: {
+    type: String,
+    required: true,
+  },
+  price: {
+    type: Number,
+    required: true,
+  },
+  room: {
+    type: String,
+    required: true,
+  },
+  wifi: {
+    type: String,
+    default: "No",
+  },
+  furnished: {
+    type: String,
+    default: "No",
+  },
+  images: [
+    {
+      public_id: {
         type: String,
         required: true,
-    },
-    email: {
-        type: String,
-        required: [true, "Email is required"],
-        unique: true, // Ensure unique email
-    },
-    phone: {
-        type: Number,
-        required: [true, "Phone number is required"],
-        unique: true, // Ensure unique phone number
-    },
-    password: {
-        type: String,
-        required: [true, "Password is required"],
-    },
-    address: {
+      },
+      url: {
         type: String,
         required: true,
-    },
-    price: {
-        type: Number,
-        required: true,
-    },
-    room: {
+      },
+      secure_url: {
         type: String,
         required: true,
+      },
     },
-    wifi: {
-        type: String,
-        default: 'No',
+  ],
+  location: {
+    type: {
+      type: String,
+      enum: ["Point"],
+      required: true,
+      default: "Point",
     },
-    furnished: {
-        type: Boolean, // Change to boolean for proper type handling
-        default: false,
+    coordinates: {
+      type: [Number],
+      required: true,
     },
-    image: [{
-        filename: {
-            type: String,
-            required: true,
-        },
-        path: {
-            type: String,
-            required: true,
-        },
-    }],
-    createdAt: {
-        type: Date,
-        default: Date.now,
-    },
+    timestamp: { type: Date, default: Date.now },
+  },
 });
 
-// Create and export the Mongoose model
-const Hotel = mongoose.model<IHotel>("Hotel", hotelSchema);
+// Create a geospatial index on the location field
+hotelSchema.index({ location: "2dsphere" });
 
-export default Hotel;
+// Create and export the model
+const Hotels = mongoose.model<IHotel>("Hotels", hotelSchema);
+export default Hotels;
